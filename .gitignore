@@ -1,0 +1,32 @@
+.history
+*.iml
+*.ipr
+*.iws
+*.jar
+*.class
+*.log
+*.log.gz
+*.DS_Store*
+
+# sbt specific
+.cache/
+.history/
+.lib/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+project/plugins/target/
+project/target/
+
+# Scala-IDE specific
+.scala_dependencies
+.worksheet
+.idea
+.idea_modules
+.bsp/
+
+# Dataset
+Dataset2roundsEredivie20172018.csv

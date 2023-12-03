@@ -1,0 +1,7 @@
+<Loggers>
+
+  <Root level="${env:LOGLEVEL:-info}" includeLocation="true">
+    <AppenderRef ref="Stdout"/>
+  </Root>
+
+</Loggers>
