@@ -1,110 +1,110 @@
 package com.mahelmus
 
-import com.mahelmus.domain.{Action, ActionType, HomeOrAway, Period, Person, Team}
-import com.typesafe.config.Config
-import org.apache.pekko.{Done, NotUsed}
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.scaladsl.{Sink, Source}
-
-import scala.concurrent.{ExecutionContext, Future}
-import kantan.csv.{RowDecoder, _}
-import kantan.csv.java8._
-import kantan.csv.ops.toCsvInputOps
+import com.mahelmus.domain._
 import org.apache.logging.log4j.{LogManager, Logger}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.stream.Attributes
+import org.apache.pekko.stream.scaladsl.{Flow, Source}
+import org.apache.pekko.{Done, NotUsed}
 
-import java.nio.file.Path
-import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
+import java.time.{LocalDate, ZoneId}
+import scala.concurrent.Future
+import scala.io.Codec
+import scala.util.Try
 
+/**
+ * Use this trait to add aggregation options to your application
+ */
 trait Aggregator {
   import Aggregator._
 
   implicit def system: ActorSystem
-  def run(dataset: String, config: Config)(implicit ec: ExecutionContext): Future[Done] ={
-    val data = importData(dataset, config)
-    data.wireTap { value =>
-      if (value._2 % 500 == 0) {
-        log.info("Processed [{}] elements from input source", value._2)
-      }
-    }.groupBy(Int.MaxValue, { case (action, _) => (action.person.id, action.actionType) })
-      .map { case (action, _) =>
-        log.info("[{}] did [{}]", action.person.name, action.actionType)
 
-      }.mergeSubstreams.runWith(Sink.ignore)
+  /**
+   * Run the stream and log the Player statistics
+   * @param dataset CSV file containing [[Action]]s
+   * @return
+   */
+  def run(dataset: String): Future[Done] ={
+    val data = importData(dataset)
+
+    data
+      .log(name = "streamAggregator")
+      .addAttributes(
+        Attributes.logLevels(
+          onElement = Attributes.LogLevels.Off,
+          onFinish = Attributes.LogLevels.Info,
+          onFailure = Attributes.LogLevels.Error))
+      .groupBy(Int.MaxValue, action => action.person.id)
+      .via(playerStats)
+      .mergeSubstreams
+      .runForeach { aggregatedResult => // Logging stats, which usually will be stored in a DB or sent to Kafka
+        log.info("Player [{}]:  [{}]",
+          aggregatedResult.map(_._1._2).head,
+          aggregatedResult.map(x => (x._1._3, x._2)))
+      }
   }
 }
 
 object Aggregator {
-  private val log: Logger = LogManager.getLogger(getClass)
+  private val log: Logger = LogManager.getLogger(this.getClass)
 
-  case class Rest(actionId: Long,
-                  competition: String,
-                  matchId: Long,
-                  kickoffDate: LocalDate,
-                  startTime: Option[Long],
-                  endTime: Option[Long],
-                  shirtNum: Option[Byte],
-                  personFunction: String,
-                  reason: Option[String],
-                  extraInfo: Option[String])
+  private val formatter =
+    DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm").withZone(ZoneId.of("Europe/Paris"))
 
-  val format = DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm")
-  implicit val dateDecoder: CellDecoder[LocalDate] = localDateDecoder(format)
-  implicit val personDecoder: RowDecoder[Person] = RowDecoder.decoder(11, 12)(Person.apply)
-  implicit val subPersonDecoder: RowDecoder[Person] = RowDecoder.decoder(17, 18)(Person.apply)
-  implicit val teamDecoder: RowDecoder[Team] = RowDecoder.decoder(9,10)(Team.apply)
-  implicit val homeOrAwayDecoder: RowDecoder[HomeOrAway] = RowDecoder.decoder(8)(HomeOrAway.apply)
-  implicit val periodDecoder: RowDecoder[Period] = RowDecoder.decoder(5)(Period.apply)
-  implicit val actionTypeDecoder: RowDecoder[ActionType] = RowDecoder.decoder(4)(ActionType.apply)
-  implicit val restDecoder: RowDecoder[Rest] = RowDecoder.decoder(0,1, 2, 3, 6, 7, 14, 15, 16, 17)(Rest.apply)
-  implicit val actionDecoder: RowDecoder[Action] = RowDecoder.from { elems =>
-    for {
-      rest <- restDecoder.decode(elems)
-      person <- personDecoder.decode(elems)
-      subperson <- subPersonDecoder.decode(elems)
-      team <- teamDecoder.decode(elems)
-      homeOrAway <- homeOrAwayDecoder.decode(elems)
-      actionType <- actionTypeDecoder.decode(elems)
-      period <- periodDecoder.decode(elems)
-    } yield Action(
-      id = rest.actionId,
-      competition = rest.competition,
-      matchId = rest.matchId,
-      kickoffDate = rest.kickoffDate,
-      actionType = actionType,
-      period = period,
-      startTime = rest.startTime,
-      endTime = rest.endTime,
-      homeOrAway = homeOrAway,
-      team = team,
-      person = person,
-      shirtNum = rest.shirtNum,
-      personFunction = rest.personFunction,
-      reason = rest.reason,
-      extraInfo = rest.extraInfo,
-      subPerson = subperson match {
-        case Person(0, "NULL") => None
-        case sp => Some(sp)
-      })
+  /**
+   * Source of input data
+   * @param dataset CSV file containing [[Action]]s
+   * @return Source of Actions
+   */
+  def importData(dataset: String): Source[Action, NotUsed] = {
+    Source
+      .fromIterator(() => scala.io.Source.fromResource(dataset)(Codec.UTF8).getLines())
+      .map(row => row.split(",").map(_.trim).toList)
+      .drop(1) // drop header
+      .collect { case actionId :: competition :: matchId :: kickoffDate :: actionType ::
+        period :: startTime :: endTime :: homeOrAway :: teamId :: teamName ::
+        personId :: personName :: shirtNum :: personFunction :: reason ::
+        extraInfo :: subpersonId :: subpersonName :: Nil =>
+        for {
+          id <- Try(actionId.toLong).toOption
+          mid <- Try(matchId.toLong).toOption
+          date <- Try(LocalDate.from(formatter.parse(kickoffDate))).toOption
+          team <- Try(Team(teamId.toInt, teamName)).toOption
+          person <- Try(Person(personId.toLong, personName)).toOption
+        } yield
+        Action(
+          id = id,
+          competition = competition,
+          matchId = mid,
+          kickoffDate = date,
+          actionType = ActionType(actionType),
+          period = Period(period),
+          startTime = startTime.toLongOption,
+          endTime = endTime.toLongOption,
+          homeOrAway = HomeOrAway(homeOrAway),
+          team = team,
+          person = person,
+          shirtNum = shirtNum.toByteOption,
+          personFunction = personFunction,
+          reason = if (reason.trim.toLowerCase == "NULL") None else Some(reason),
+          extraInfo = if (extraInfo.trim.toLowerCase == "NULL") None else Some(extraInfo),
+          subPerson = Try(Person(subpersonId.toLong, subpersonName)).toOption
+        )
+      }.collect { case Some(action) => action }
   }
 
-  def importData(dataset: String, config: Config): Source[(Action, Int), NotUsed] = {
-
-    Source.fromIterator(() => Path.of(dataset).toUri.asCsvReader[Action](rfc.withHeader()).iterator.zipWithIndex.filter {
-        case (Left(error), index) =>
-          log.error("Failed to parse row at line [{}]", index, error)
-          false
-
-        case (Right(_), _) =>
-          true
+  /**
+   * Aggregate player statistics
+   * @return Flow of Actions to Player Stats by PLayer and Action type
+   */
+  def playerStats: Flow[Action, Map[(Long, String, ActionType), Int], NotUsed] =
+    Flow[Action].map(action => (action.person.id, action.person.name, action.actionType) -> 1)
+      .fold(Map.empty[(Long, String, ActionType), Int]) { (countMap, stats) =>
+        val (key, counter) = stats
+        countMap + (key -> (countMap.getOrElse(key, 0) + counter))
       }
-      .collect { case (Right(action), index) => (action, index) })
 
-  }
-
-  def aggregatePersonStatistics(action: Action): Unit = {
-
-
-  }
 }
 

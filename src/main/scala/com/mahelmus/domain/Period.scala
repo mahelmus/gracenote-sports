@@ -1,15 +1,13 @@
 package com.mahelmus.domain
 
 /**
- * Moment in a match when an action can take place
+ * Moment in a match when an [[Action]] can take place
  */
 sealed trait Period extends Product with Serializable {
   def value: String
 }
 
 object Period {
-  val periods: Set[Period] = Set(BeforeMatch, Start, FirstHalf, SecondHalf)
-
   def apply(str: String): Period =
     str.trim.toLowerCase() match {
       case Start.value => Start

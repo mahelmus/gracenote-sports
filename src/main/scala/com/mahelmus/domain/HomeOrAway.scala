@@ -1,7 +1,7 @@
 package com.mahelmus.domain
 
 /**
- * Whether the action is performed by the team playing Home or Away
+ * Whether the action is performed by the home or away team
  */
 sealed trait HomeOrAway extends Product with Serializable {
   def value: String
@@ -12,6 +12,7 @@ object HomeOrAway {
     str.trim.toLowerCase() match {
       case Home.value => Home
       case Away.value => Away
+      case _ => Away
     }
 }
 case object Home extends HomeOrAway {

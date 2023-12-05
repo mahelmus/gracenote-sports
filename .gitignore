@@ -29,4 +29,4 @@ project/target/
 .bsp/
 
 # Dataset
-Dataset2roundsEredivie20172018.csv
+src/main/resources/Dataset2roundsEredivie20172018.csv

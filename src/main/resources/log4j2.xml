@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="http://logging.apache.org/log4j/2.0/config" status="WARN">
+  <Loggers>
+    <Root level="${env:LOG_LEVEL:-INFO}" includeLocation="true">
+      <AppenderRef ref="Stdout"/>
+    </Root>
+    <Logger name="pekko" level="${env:PEKKO_LOG_LEVEL:-INFO}" additivity="false">
+      <AppenderRef ref="Stdout"/>
+    </Logger>
+  </Loggers>
+  <Appenders>
+    <Console name="Stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d %p %c{1.} [%t] %m%n"/>
+    </Console>
+  </Appenders>
+</Configuration>

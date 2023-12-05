@@ -6,9 +6,7 @@ package com.mahelmus.domain
 sealed abstract class ActionType(final val value: String) extends Product with Serializable
 
 object ActionType {
-  val allActionTypes: Set[ActionType] = Set(BlockedShot, Corner, DropBall, EndOfPeriod, FoulCommitted,
-    FreeKick, Goal, GoalKick, HitBar, HitPost)
-
+  private final val noAction = "no action"
   private final val blockedShot = "blocked shot"
   private final val corner = "corner"
   private final val dropBall = "drop ball"
@@ -20,9 +18,9 @@ object ActionType {
   private final val hitBar = "hit bar"
   private final val hitPost = "hit post"
   private final val injuryTime = "injury time"
-  private final val kickOff = "kick off"
-  private final val lineUp = "line up"
-  private final val offside = "off side"
+  private final val kickOff = "kick-off"
+  private final val lineUp = "line-up"
+  private final val offside = "offside"
   private final val ownGoal = "own goal"
   private final val penaltyMissed = "penalty missed"
   private final val red = "red"
@@ -38,12 +36,36 @@ object ActionType {
 
   def apply(str: String): ActionType =
     str.trim.toLowerCase() match {
+      case NoAction.value => NoAction
       case BlockedShot.value => BlockedShot
       case Corner.value => Corner
       case DropBall.value => DropBall
       case EndOfPeriod.value => EndOfPeriod
+      case FoulCommitted.value => FoulCommitted
+      case FreeKick.value => FreeKick
+      case Goal.value => Goal
+      case GoalKick.value => GoalKick
+      case HitBar.value => HitBar
+      case HitPost.value => HitPost
+      case InjuryTime.value => InjuryTime
+      case KickOff.value => KickOff
+      case LineUp.value => LineUp
+      case Offside.value => Offside
+      case OwnGoal.value => OwnGoal
+      case PenaltyMissed.value => PenaltyMissed
+      case Red.value => Red
+      case Red2Yellow.value => Red2Yellow
+      case SaveByGoalkeeper.value => SaveByGoalkeeper
+      case SaveByPlayer.value => SaveByPlayer
+      case ScoringOpportunity.value => ScoringOpportunity
+      case ShotBlockedBy.value => ShotBlockedBy
+      case ShotOnGoal.value => ShotOnGoal
+      case ShotWide.value => ShotWide
+      case Substitution.value => Substitution
+      case Yellow.value => Yellow
     }
 
+  case object NoAction extends ActionType(noAction)
   case object BlockedShot extends ActionType(blockedShot)
   case object Corner extends ActionType(corner)
   case object DropBall extends ActionType(dropBall)
@@ -70,5 +92,6 @@ object ActionType {
   case object ShotWide extends ActionType(shotWide)
   case object Substitution extends ActionType(substitution)
   case object Yellow extends ActionType(yellow)
+
 }
 
